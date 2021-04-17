@@ -26,10 +26,14 @@ class FuzzifyVariable(torch.nn.Module):
         Forward pass will then fuzzify the input (value for each MF).
     '''
     def __init__(self, mfdefs):
+        """
+        Constructor of FuzzifyVariable.
+        :param mfdefs: [list], list of all MF Classes for 1 input per iteration
+        """
         super(FuzzifyVariable, self).__init__()
         if isinstance(mfdefs, list):  # No MF names supplied
-            mfnames = ['mf{}'.format(i) for i in range(len(mfdefs))]
-            mfdefs = OrderedDict(zip(mfnames, mfdefs))
+            mfnames = ['mf{}'.format(i) for i in range(len(mfdefs))]    # set MF name
+            mfdefs = OrderedDict(zip(mfnames, mfdefs))  # set dict of MF name and MF
         self.mfdefs = torch.nn.ModuleDict(mfdefs)
         self.padding = 0
 
@@ -180,8 +184,14 @@ class ConsequentLayer(torch.nn.Module):
         Hence, coeffs are no longer parameters for backprop.
     '''
     def __init__(self, d_in, d_rule, d_out):
+        """
+        Constructor of ConsequentLayer.
+        :param d_in: [int], no. of input.
+        :param d_rule: [int], no. of rule.
+        :param d_out: [int], no. of output.
+        """
         super(ConsequentLayer, self).__init__()
-        c_shape = torch.Size([d_rule, d_out, d_in+1])
+        c_shape = torch.Size([d_rule, d_out, d_in+1])   # consider constant consequent parameter
         self._coeff = torch.zeros(c_shape, dtype=dtype, requires_grad=True)
 
     @property
@@ -223,7 +233,7 @@ class ConsequentLayer(torch.nn.Module):
         y_actual_2d = y_actual.view(y_actual.shape[0], -1)
         # Use gels to do LSE, then pick out the solution rows:
         try:
-            coeff_2d, _ = torch.gels(y_actual_2d, weighted_x_2d)
+            coeff_2d, _ = torch.lstsq(y_actual_2d, weighted_x_2d)
         except RuntimeError as e:
             print('Internal error in gels', e)
             print('Weights are:', weighted_x)
@@ -294,20 +304,30 @@ class WeightedSumLayer(torch.nn.Module):
 
 
 class AnfisNet(torch.nn.Module):
-    '''
+    """
         This is a container for the 5 layers of the ANFIS net.
         The forward pass maps inputs to outputs based on current settings,
         and then fit_coeff will adjust the TSK coeff using LSE.
-    '''
+    """
     def __init__(self, description, invardefs, outvarnames, hybrid=True):
+        """
+        Constructor of ANFIS.
+        :param description: [Str], name of the model.
+        :param invardefs: [list], list contain input info: (input name, [its MF]).
+        :param outvarnames: [list], list contain name of output.
+        :param hybrid: [boolean], determine using BP or LSE.
+        """
         super(AnfisNet, self).__init__()
         self.description = description
         self.outvarnames = outvarnames
         self.hybrid = hybrid
         varnames = [v for v, _ in invardefs]
-        mfdefs = [FuzzifyVariable(mfs) for _, mfs in invardefs]
+        mfdefs = [FuzzifyVariable(mfs) for _, mfs in invardefs] # set MF for each input
         self.num_in = len(invardefs)
-        self.num_rules = np.prod([len(mfs) for _, mfs in invardefs])
+        grid = True
+        if not grid:    # set rules manually
+            pass
+        self.num_rules = np.prod([len(mfs) for _, mfs in invardefs]) # No. of fuzzy rules: grid partition
         if self.hybrid:
             cl = ConsequentLayer(self.num_in, self.num_rules, self.num_out)
         else:
