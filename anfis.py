@@ -50,10 +50,11 @@ class FuzzifyVariable(torch.nn.Module):
         return self.mfdefs.items()
 
     def pad_to(self, new_size):
-        '''
+        """
             Will pad result of forward-pass (with zeros) so it has new_size,
-            i.e. as if it had new_size MFs.
-        '''
+            i.e.  padding = max_size - no. of MF, as if it had new_size MFs.
+            If inputs have different no. MF, return non zero.
+        """
         self.padding = new_size - len(self.mfdefs)
 
     def fuzzify(self, x):
@@ -71,7 +72,7 @@ class FuzzifyVariable(torch.nn.Module):
             y.shape: n_cases * n_mfs
         '''
         y_pred = torch.cat([mf(x) for mf in self.mfdefs.values()], dim=1)
-        if self.padding > 0:
+        if self.padding > 0:    # When inputs have different no. of MF
             y_pred = torch.cat([y_pred,
                                 torch.zeros(x.shape[0], self.padding)], dim=1)
         return y_pred
@@ -79,6 +80,7 @@ class FuzzifyVariable(torch.nn.Module):
 
 class FuzzifyLayer(torch.nn.Module):
     '''
+        Layer 1.
         A list of fuzzy variables, representing the inputs to the FIS.
         Forward pass will fuzzify each variable individually.
         We pad the variables so they all seem to have the same number of MFs,
@@ -90,7 +92,7 @@ class FuzzifyLayer(torch.nn.Module):
             self.varnames = ['x{}'.format(i) for i in range(len(varmfs))]
         else:
             self.varnames = list(varnames)
-        maxmfs = max([var.num_mfs for var in varmfs])
+        maxmfs = max([var.num_mfs for var in varmfs])   # max. no. of MF
         for var in varmfs:
             var.pad_to(maxmfs)
         self.varmfs = torch.nn.ModuleDict(zip(self.varnames, varmfs))
@@ -128,22 +130,26 @@ class FuzzifyLayer(torch.nn.Module):
             '{} is wrong no. of input values'.format(self.num_in)
         y_pred = torch.stack([var(x[:, i:i+1])
                               for i, var in enumerate(self.varmfs.values())],
-                             dim=1)
+                             dim=1)  # MF(x), fuzzify the input!
         return y_pred
 
 
 class AntecedentLayer(torch.nn.Module):
     '''
+        Layer 2.
         Form the 'rules' by taking all possible combinations of the MFs
         for each variable. Forward pass then calculates the fire-strengths.
     '''
     def __init__(self, varlist):
         super(AntecedentLayer, self).__init__()
         # Count the (actual) mfs for each variable:
-        mf_count = [var.num_mfs for var in varlist]
+        mf_count = [var.num_mfs for var in varlist]  # No. of MF of each input
         # Now make the MF indices for each rule:
+        grid = True
+        if not grid:   # Set rules manually
+            pass
         mf_indices = itertools.product(*[range(n) for n in mf_count])
-        self.mf_indices = torch.tensor(list(mf_indices))
+        self.mf_indices = torch.tensor(list(mf_indices))    # Grid partition: [[0, 0], [0, 1]...]
         # mf_indices.shape is n_rules * n_in
 
     def num_rules(self):
@@ -173,7 +179,7 @@ class AntecedentLayer(torch.nn.Module):
         ants = torch.gather(x.transpose(1, 2), 1, batch_indices)
         # ants.shape is n_cases * n_rules * n_in
         # Last, take the AND (= product) for each rule-antecedent
-        rules = torch.prod(ants, dim=2)
+        rules = torch.prod(ants, dim=2)  # Calculate the fire-strength: A1 * B1, A1 * B2, ...
         return rules
 
 
@@ -224,13 +230,14 @@ class ConsequentLayer(torch.nn.Module):
         '''
         # Append 1 to each list of input vals, for the constant term:
         x_plus = torch.cat([x, torch.ones(x.shape[0], 1)], dim=1)
-        # Shape of weighted_x is n_cases * n_rules * (n_in+1)
+        # Shape of weighted_x is (n_cases * n_rules * 1) * (n_cases * 1 * n_in + 1) = n_cases * n_rules * (n_in+1)
         weighted_x = torch.einsum('bp, bq -> bpq', weights, x_plus)
+        # weighted_x = torch.bmm(weights.unsqueeze(2), x_plus.unsqueeze(2).transpose(1, 2))  # alternative
         # Can't have value 0 for weights, or LSE won't work:
         weighted_x[weighted_x == 0] = 1e-12
         # Squash x and y down to 2D matrices for gels:
-        weighted_x_2d = weighted_x.view(weighted_x.shape[0], -1)
-        y_actual_2d = y_actual.view(y_actual.shape[0], -1)
+        weighted_x_2d = weighted_x.view(weighted_x.shape[0], -1)    # n_cases * n_features
+        y_actual_2d = y_actual.view(y_actual.shape[0], -1)  # n_cases * n_output
         # Use gels to do LSE, then pick out the solution rows:
         try:
             coeff_2d, _ = torch.lstsq(y_actual_2d, weighted_x_2d)
@@ -238,7 +245,7 @@ class ConsequentLayer(torch.nn.Module):
             print('Internal error in gels', e)
             print('Weights are:', weighted_x)
             raise e
-        coeff_2d = coeff_2d[0:weighted_x_2d.shape[1]]
+        coeff_2d = coeff_2d[0:weighted_x_2d.shape[1]]   # n_features * n_output, First n_features rows are the parameter
         # Reshape to 3D tensor: divide by rules, n_in+1, then swap last 2 dims
         self.coeff = coeff_2d.view(weights.shape[1], x.shape[1]+1, -1)\
             .transpose(1, 2)
@@ -252,10 +259,10 @@ class ConsequentLayer(torch.nn.Module):
                   y.shape: n_cases * n_out * n_rules
         '''
         # Append 1 to each list of input vals, for the constant term:
-        x_plus = torch.cat([x, torch.ones(x.shape[0], 1)], dim=1)
-        # Need to switch dimansion for the multipy, then switch back:
-        y_pred = torch.matmul(self.coeff, x_plus.t())
-        return y_pred.transpose(0, 2)  # swaps cases and rules
+        x_plus = torch.cat([x, torch.ones(x.shape[0], 1)], dim=1)   # shape: n_sample * n_input + 1
+        # Need to switch dimension for the multiply, then switch back:
+        y_pred = torch.matmul(self.coeff, x_plus.t())   # shape: n_rules * n_out * n_sample
+        return y_pred.transpose(0, 2)  # swaps cases and rules: n_sample * n_out* n_rules
 
 
 class PlainConsequentLayer(ConsequentLayer):
@@ -327,17 +334,17 @@ class AnfisNet(torch.nn.Module):
         grid = True
         if not grid:    # set rules manually
             pass
-        self.num_rules = np.prod([len(mfs) for _, mfs in invardefs]) # No. of fuzzy rules: grid partition
+        self.num_rules = np.prod([len(mfs) for _, mfs in invardefs])  # No. of fuzzy rules: grid partition
         if self.hybrid:
-            cl = ConsequentLayer(self.num_in, self.num_rules, self.num_out)
+            cl = ConsequentLayer(self.num_in, self.num_rules, self.num_out)  # hybrid: LSE for consequent
         else:
-            cl = PlainConsequentLayer(self.num_in, self.num_rules, self.num_out)
+            cl = PlainConsequentLayer(self.num_in, self.num_rules, self.num_out)    # no hybrid: BP for consequent
         self.layer = torch.nn.ModuleDict(OrderedDict([
-            ('fuzzify', FuzzifyLayer(mfdefs, varnames)),
-            ('rules', AntecedentLayer(mfdefs)),
-            # normalisation layer is just implemented as a function.
-            ('consequent', cl),
-            # weighted-sum layer is just implemented as a function.
+            ('fuzzify', FuzzifyLayer(mfdefs, varnames)),    # Layer 1
+            ('rules', AntecedentLayer(mfdefs)),     # Layer 2
+            # Layer 3: normalisation layer is just implemented as a function.
+            ('consequent', cl),     # Layer 4
+            # Layer 5: weighted-sum layer is just implemented as a function.
             ]))
 
     @property
@@ -375,6 +382,11 @@ class AnfisNet(torch.nn.Module):
         return self.outvarnames
 
     def extra_repr(self):
+        """
+        Override the built in extra_repr function,
+        print linguistic label automatically.
+        :return: Description of fuzzy rules.
+        """
         rstr = []
         vardefs = self.layer['fuzzify'].varmfs
         rule_ants = self.layer['rules'].extra_repr(vardefs).split('\n')
@@ -389,13 +401,13 @@ class AnfisNet(torch.nn.Module):
             I save the outputs from each layer to an instance variable,
             as this might be useful for comprehension/debugging.
         '''
-        self.fuzzified = self.layer['fuzzify'](x)
-        self.raw_weights = self.layer['rules'](self.fuzzified)
-        self.weights = F.normalize(self.raw_weights, p=1, dim=1)
-        self.rule_tsk = self.layer['consequent'](x)
+        self.fuzzified = self.layer['fuzzify'](x)   # layer 1 out: Fuzzified value
+        self.raw_weights = self.layer['rules'](self.fuzzified)  # layer 2 out: Firing strength of rules
+        self.weights = F.normalize(self.raw_weights, p=1, dim=1)    # layer 3 out: Normalized firing strength
+        self.rule_tsk = self.layer['consequent'](x)     # layer 4 out: consequent f = px + qy + r,
         # y_pred = self.layer['weighted_sum'](self.weights, self.rule_tsk)
-        y_pred = torch.bmm(self.rule_tsk, self.weights.unsqueeze(2))
-        self.y_pred = y_pred.squeeze(2)
+        y_pred = torch.bmm(self.rule_tsk, self.weights.unsqueeze(2))  # layer 5 out: weighted sum w * f, overall output
+        self.y_pred = y_pred.squeeze(2)  # 3D -> 2D, due to single output system
         return self.y_pred
 
 
