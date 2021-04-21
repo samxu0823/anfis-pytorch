@@ -79,7 +79,7 @@ def plot_errors(err, metric, test_data=False):
     plt.show()
 
 
-def plotResults(y_actual, y_predicted):
+def plot_results(y_actual, y_predicted):
     '''
         Plot the actual and predicted y values (in different colours).
     '''
@@ -91,21 +91,36 @@ def plotResults(y_actual, y_predicted):
 
 
 def _plot_mfs(var_name, fv, x):
-    '''
-        A simple utility function to plot the MFs for a variable.
-        Supply the variable name, MFs and a set of x values to plot.
-    '''
+    """
+    A simple utility function to plot the MFs for each feature in interval [x_min, x_max].
+    Supply the variable name, MFs and a set of x values to plot.
+    :param var_name: [Str], name of the input feature.
+    :param fv: [FuzzyfiVariable], Membership function.
+    :param x: [tensor], m * 1 tensor, single input feature as x.
+    :return:
+    """
     # Sort x so we only plot each x-value once:
-    xsort, _ = x.sort()
-    for mfname, yvals in fv.fuzzify(xsort):
-        plt.plot(xsort.tolist(), yvals.tolist(), label=mfname)
+    min = torch.min(x)
+    max = torch.max(x)
+    num = 100
+    x_in = torch.arange(min, max, (max - min) / num)
+    for mfname, yvals in fv.fuzzify(x_in):
+        plt.plot(x_in.tolist(), yvals.tolist(), label=mfname)
     plt.xlabel('Values for variable {} ({} MFs)'.format(var_name, fv.num_mfs))
     plt.ylabel('Membership')
-    plt.legend(bbox_to_anchor=(1., 0.95))
+    # plt.legend(bbox_to_anchor=(1., 0.95))
+    plt.legend()
     plt.show()
 
 
 def plot_all_mfs(model, x):
+    """
+    Plot membership function. Detail see _plot_mfs.
+    Customize the x interval: tensor([[min, min], [max, max]]) for 2 input features.
+    :param model: [AnfisNet], anfis model.
+    :param x: [tensor], m * n tensor, a set of input. n is no. of input feature.
+    :return:
+    """
     for i, (var_name, fv) in enumerate(model.layer.fuzzify.varmfs.items()):
         _plot_mfs(var_name, fv, x[:, i])
 
@@ -120,19 +135,24 @@ def calc_error(y_pred, y_actual):
 
 
 def test_anfis(model, data, show_plots=False):
-    '''
-        Do a single forward pass with x and compare with y_actual.
-    '''
-    x, y_actual = data.dataset.tensors
+    """
+    Do a single forward pass with x and compare with y_actual.
+    :param model: [AnfisNet], anfis model after training.
+    :param data: [DataLoader], test data set.
+    :param show_plots: [boolean], show membership function after training and result.
+    :return:
+    """
+
+    x_test, y_actual = data.dataset.tensors
     if show_plots:
-        plot_all_mfs(model, x)
-    print('### Testing for {} cases'.format(x.shape[0]))
-    y_pred = model(x)
+        plot_all_mfs(model, x_test)
+    print('### Testing for {} cases'.format(x_test.shape[0]))
+    y_pred = model(x_test)
     mse, rmse, perc_loss = calc_error(y_pred, y_actual)
     print('MS error={:.5f}, RMS error={:.5f}, percentage={:.2f}%'
           .format(mse, rmse, perc_loss))
     if show_plots:
-        plotResults(y_actual, y_pred)
+        plot_results(y_actual, y_pred)
 
 
 def train_anfis_with(model, data, optimizer, criterion,
@@ -173,7 +193,7 @@ def train_anfis_with(model, data, optimizer, criterion,
         plot_errors(errors, metric)
         y_actual = data.dataset.tensors[1]
         y_pred = model(data.dataset.tensors[0])
-        plotResults(y_actual, y_pred)
+        plot_results(y_actual, y_pred)
     return x, y_pred, y_actual
 
 
@@ -193,7 +213,7 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
     y_actual: [tensor], Target y value.
     y_pred: [tensor], Prediction by x_train using trained model.
     """
-    test = False
+    test = False    # Using test data during training or not
     if isinstance(data, list):
         test = True
         train_data, test_data = data
@@ -242,12 +262,12 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
                 train_error = errors[metric][-1][0]
                 test_error = errors[metric][-1][1]
                 print(f'epoch {t}: Train {metric}={train_error:.5f}, Test {metric}={test_error:.5f}')
-    x_train = test_data.dataset.tensors[0]
-    y_actual = test_data.dataset.tensors[1]
+    x_train = train_data.dataset.tensors[0]
+    y_actual = train_data.dataset.tensors[1]
     y_pred = model(x_train)
     if show_plots:
         plot_errors(errors, metric, test)
-        plotResults(y_actual, y_pred)
+        plot_results(y_actual, y_pred)
     return x_train, y_actual, y_pred
 
 
@@ -281,7 +301,7 @@ if __name__ == '__main__':
     # y = torch.pow(x, 3)
     # model, errors = linear_model(x, y, 100)
     # plot_errors(errors)
-    # plotResults(y, model(x))
+    # plot_results(y, model(x))
     s = {"mse": [1], "rmse": [(2, 3), (5, 6)]}
     print(isinstance(s["mse"][0], int))
     print(isinstance(s["mse"][0], tuple))

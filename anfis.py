@@ -62,7 +62,7 @@ class FuzzifyVariable(torch.nn.Module):
             Yield a list of (mf-name, fuzzy values) for these input values.
         '''
         for mfname, mfdef in self.mfdefs.items():
-            yvals = mfdef(x)
+            yvals = mfdef(x)    # check foward() function in certain MF class
             yield(mfname, yvals)
 
     def forward(self, x):

@@ -148,7 +148,7 @@ def test_jang(show_plots=True):
         experimental.plot_all_mfs(model, X)
         y_actual = y
         y_pred = model(X)
-        experimental.plotResults(y_actual, y_pred)
+        experimental.plot_results(y_actual, y_pred)
 
 
 # #####
@@ -175,7 +175,7 @@ def test_vignette(show_plots=True):
         experimental.plot_all_mfs(model, X)
         y_actual = y
         y_pred = model(X)
-        experimental.plotResults(y_actual, y_pred)
+        experimental.plot_results(y_actual, y_pred)
 
 
 classify_example()
