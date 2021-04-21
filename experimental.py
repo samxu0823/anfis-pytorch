@@ -63,16 +63,19 @@ def plot_errors(err, metric, test_data=False):
     :return:
     void
     """
-    plt.figure()
     if not test_data:
+        plt.figure()
         error = err[metric]
         plt.plot(range(len(error)), error, '-ro', label='errors')
         plt.ylabel(f"{metric}")
         plt.xlabel('Epoch')
     else:
-        train_error, test_error = err[metric]
-        plt.plot(range(len(train_error)), train_error, '-ro', label='Training')
-        plt.plot(range(len(test_error)), test_error, '-bx', label='Test')
+        plt.figure()
+        train_error = [x for x, _ in err[metric]]
+        test_error = [x for _, x in err[metric]]
+        plt.plot(range(len(train_error)), train_error, marker='o', color='r', label='Training')
+        plt.plot(range(len(test_error)), test_error, marker='x', color='b', label='Test')
+    plt.legend()
     plt.show()
 
 
@@ -143,7 +146,7 @@ def train_anfis_with(model, data, optimizer, criterion,
           format(epochs, data.dataset.tensors[0].shape[0]))
     for t in range(epochs):
         # Process each mini-batch in turn:
-        for x, y_actual in data:
+        for x, y_actual in data:    # Random x: data loader will shuffle the x, y pairs in every epoch
             y_pred = model(x)
             # Compute and print loss
             loss = criterion(y_pred, y_actual)
@@ -152,7 +155,7 @@ def train_anfis_with(model, data, optimizer, criterion,
             loss.backward()
             optimizer.step()
         # Epoch ending, so now fit the coefficients based on all data:
-        x, y_actual = data.dataset.tensors
+        x, y_actual = data.dataset.tensors  # Sequential x: x, y pairs in original sequence.
         with torch.no_grad():
             model.fit_coeff(x, y_actual)
         # Get the error rate for the whole batch:
@@ -174,25 +177,37 @@ def train_anfis_with(model, data, optimizer, criterion,
     return x, y_pred, y_actual
 
 
-def train_anfis_with_cv(model, train_data, test_data, optimizer, criterion,
+def train_anfis_with_cv(model, data, optimizer, criterion,
                      epochs=500, show_plots=False, metric="mse"):
     """
     Train the given model using training data, meanwhile use test data to test the model in every epoch.
     :param model: [AnfisNet], the given model.
-    :param train_data: [tensor], training data.
-    :param test_data: [tensor], test data.
-    :param optimizer: [], optimizer.
-    :param criterion: [], loss function.
+    :param data: [DataLoader] or [list], training data or list of training data and test data.
+    :param optimizer: [optim], optimizer.
+    :param criterion: [Loss], loss function.
     :param epochs: [int], no. of training epoch.
     :param show_plots: [boolean], show the learning curve.
+    :param metric: [str],  error used to plot curve.
     :return:
+    x_train: [tensor], x value from data set.
+    y_actual: [tensor], Target y value.
+    y_pred: [tensor], Prediction by x_train using trained model.
     """
+    test = False
+    if isinstance(data, list):
+        test = True
+        train_data, test_data = data
+        print('### Training for {} epochs, training size = {} cases, test size = {}'.
+              format(epochs, train_data.dataset.tensors[0].shape[0], test_data.dataset.tensors[0].shape[0]))
+    else:
+        train_data = data
+        print('### Training for {} epochs, training size = {} cases'.
+              format(epochs, train_data.dataset.tensors[0].shape[0]))
     errors = {"mse": [], "rmse": [], "PE": []}  # Keep a dict of these for plotting afterwards
-    print('### Training for {} epochs, training size = {} cases, test size = {}'.
-          format(epochs, train_data.dataset.tensors[0].shape[0], test_data.dataset.tensors[0].shape[0]))
+
     for t in range(epochs):
         # Process each mini-batch in turn:
-        for x_train, y_train_actual in train_data:
+        for x_train, y_train_actual in train_data:  # Random x: data loader will shuffle the x, y pairs in every epoch
             y_train_pred = model(x_train)
             # Compute and print loss
             loss = criterion(y_train_pred, y_train_actual)
@@ -201,27 +216,40 @@ def train_anfis_with_cv(model, train_data, test_data, optimizer, criterion,
             loss.backward()
             optimizer.step()
         # Epoch ending, so now fit the coefficients(Consequent parameter) based on all data:
-        x_train, y_train_actual = train_data.dataset.tensors
-        x_test, y_test_actual = test_data.dataset.tensors
+        x_train, y_train_actual = train_data.dataset.tensors    # Training data in sequence
         with torch.no_grad():
             model.fit_coeff(x_train, y_train_actual)
         # Get the error rate for the whole batch:
         y_train_pred = model(x_train)
-        y_test_pred = model(x_test)
         mse, rmse, perc_loss = calc_error(y_train_pred, y_train_actual)
-        test_mse, test_rmse, test_perc_loss = calc_error(y_test_pred, y_test_actual)
-        errors["mse"].append((mse, test_mse))
-        errors["rmse"].append((rmse, test_rmse))
-        errors["PE"].append((perc_loss, test_rmse))
+        if test:
+            x_test, y_test_actual = test_data.dataset.tensors   # test data in sequence
+            # for x_test, y_test_actual in test_data:   random test data set
+            y_test_pred = model(x_test)
+            test_mse, test_rmse, test_perc_loss = calc_error(y_test_pred, y_test_actual)
+            mse = (mse, test_mse)
+            rmse = (rmse, test_rmse)
+            perc_loss = (perc_loss, test_perc_loss)
+        errors["mse"].append(mse)
+        errors["rmse"].append(rmse)
+        errors["PE"].append(perc_loss)
         # Print some progress information as the net is trained:
         if epochs < 30 or t % 10 == 0:
-            print('epoch {:4d}: MSE={:.5f}, RMSE={:.5f} ={:.2f}%'
-                  .format(t, mse, rmse, perc_loss))
+            if not test:
+                print('epoch {:4d}: MSE={:.5f}, RMSE={:.5f}, PE ={:.2f}%'
+                      .format(t, mse, rmse, perc_loss))
+            else:
+                train_error = errors[metric][-1][0]
+                test_error = errors[metric][-1][1]
+                print(f'epoch {t}: Train {metric}={train_error:.5f}, Test {metric}={test_error:.5f}')
+    x_train = test_data.dataset.tensors[0]
+    y_actual = test_data.dataset.tensors[1]
+    y_pred = model(x_train)
     if show_plots:
-        plot_errors(errors, metric)
-        y_actual = train_data.dataset.tensors[1]
-        y_pred = model(train_data.dataset.tensors[0])
+        plot_errors(errors, metric, test)
         plotResults(y_actual, y_pred)
+    return x_train, y_actual, y_pred
+
 
 def train_anfis(model, data, epochs=500, show_plots=False, metric="rmse"):
     '''
@@ -232,13 +260,20 @@ def train_anfis(model, data, epochs=500, show_plots=False, metric="rmse"):
     return train_anfis_with(model, data, optimizer, criterion, epochs, show_plots, metric)
 
 
-def train_anfis_cv(model, train_data, test_data, epochs=500, show_plots=False, metric="rmse"):
-    '''
-        Train the given model using the given (x,y) data.
-    '''
+def train_anfis_cv(model, data, epochs=500, show_plots=False, metric="rmse"):
+    """
+    Train the given model using the given (x,y) data.
+    :param model: [AnfisNet], the given model.
+    :param data: [DataLoader] or [list], training data or list of training data and test data.
+    :param epochs: [int], no. of training epoch.
+    :param show_plots: [boolean], show the learning curve.
+    :param metric: [str], error used to plot curve.
+    :return:
+    see return of train_anfis_with_cv.
+    """
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-4, momentum=0.99)
     criterion = torch.nn.MSELoss(reduction='sum')
-    return train_anfis_with_cv(model, train_data, test_data, optimizer, criterion, epochs, show_plots, metric)
+    return train_anfis_with_cv(model, data, optimizer, criterion, epochs, show_plots, metric)
 
 
 if __name__ == '__main__':
