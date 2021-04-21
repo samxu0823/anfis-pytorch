@@ -54,13 +54,25 @@ def linear_model(x, y, epochs=200, hidden_size=10):
     return model, errors
 
 
-def plotErrors(errors):
-    '''
-        Plot the given list of error rates against no. of epochs
-    '''
-    plt.plot(range(len(errors)), errors, '-ro', label='errors')
-    plt.ylabel('Percentage error')
-    plt.xlabel('Epoch')
+def plot_errors(err, metric, test_data=False):
+    """
+    Plot the given dict of error rates against no. of epochs.
+    Currently support mse, rmse, PE.
+    :param err: [dict], (train_err, test_err), contain the different types of error.
+    :param metric: [str], plot certain error against no. of epochs
+    :return:
+    void
+    """
+    plt.figure()
+    if not test_data:
+        error = err[metric]
+        plt.plot(range(len(error)), error, '-ro', label='errors')
+        plt.ylabel(f"{metric}")
+        plt.xlabel('Epoch')
+    else:
+        train_error, test_error = err[metric]
+        plt.plot(range(len(train_error)), train_error, '-ro', label='Training')
+        plt.plot(range(len(test_error)), test_error, '-bx', label='Test')
     plt.show()
 
 
@@ -121,11 +133,11 @@ def test_anfis(model, data, show_plots=False):
 
 
 def train_anfis_with(model, data, optimizer, criterion,
-                     epochs=500, show_plots=False):
+                     epochs=500, show_plots=False, metric="rmse"):
     '''
         Train the given model using the given (x,y) data.
     '''
-    errors = []  # Keep a list of these for plotting afterwards
+    errors = {"mse": [], "rmse": [], "PE": []}  # Keep a dict of these for plotting afterwards
     # optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     print('### Training for {} epochs, training size = {} cases'.
           format(epochs, data.dataset.tensors[0].shape[0]))
@@ -146,31 +158,97 @@ def train_anfis_with(model, data, optimizer, criterion,
         # Get the error rate for the whole batch:
         y_pred = model(x)
         mse, rmse, perc_loss = calc_error(y_pred, y_actual)
-        errors.append(perc_loss)
+        errors["mse"].append(mse)
+        errors["rmse"].append(rmse)
+        errors["PE"].append(perc_loss)
         # Print some progress information as the net is trained:
         if epochs < 30 or t % 10 == 0:
             print('epoch {:4d}: MSE={:.5f}, RMSE={:.5f} ={:.2f}%'
                   .format(t, mse, rmse, perc_loss))
     # End of training, so graph the results:
     if show_plots:
-        plotErrors(errors)
+        plot_errors(errors, metric)
         y_actual = data.dataset.tensors[1]
         y_pred = model(data.dataset.tensors[0])
         plotResults(y_actual, y_pred)
+    return x, y_pred, y_actual
 
 
-def train_anfis(model, data, epochs=500, show_plots=False):
+def train_anfis_with_cv(model, train_data, test_data, optimizer, criterion,
+                     epochs=500, show_plots=False, metric="mse"):
+    """
+    Train the given model using training data, meanwhile use test data to test the model in every epoch.
+    :param model: [AnfisNet], the given model.
+    :param train_data: [tensor], training data.
+    :param test_data: [tensor], test data.
+    :param optimizer: [], optimizer.
+    :param criterion: [], loss function.
+    :param epochs: [int], no. of training epoch.
+    :param show_plots: [boolean], show the learning curve.
+    :return:
+    """
+    errors = {"mse": [], "rmse": [], "PE": []}  # Keep a dict of these for plotting afterwards
+    print('### Training for {} epochs, training size = {} cases, test size = {}'.
+          format(epochs, train_data.dataset.tensors[0].shape[0], test_data.dataset.tensors[0].shape[0]))
+    for t in range(epochs):
+        # Process each mini-batch in turn:
+        for x_train, y_train_actual in train_data:
+            y_train_pred = model(x_train)
+            # Compute and print loss
+            loss = criterion(y_train_pred, y_train_actual)
+            # Zero gradients, perform a backward pass, and update the weights(Premise parameter).
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        # Epoch ending, so now fit the coefficients(Consequent parameter) based on all data:
+        x_train, y_train_actual = train_data.dataset.tensors
+        x_test, y_test_actual = test_data.dataset.tensors
+        with torch.no_grad():
+            model.fit_coeff(x_train, y_train_actual)
+        # Get the error rate for the whole batch:
+        y_train_pred = model(x_train)
+        y_test_pred = model(x_test)
+        mse, rmse, perc_loss = calc_error(y_train_pred, y_train_actual)
+        test_mse, test_rmse, test_perc_loss = calc_error(y_test_pred, y_test_actual)
+        errors["mse"].append((mse, test_mse))
+        errors["rmse"].append((rmse, test_rmse))
+        errors["PE"].append((perc_loss, test_rmse))
+        # Print some progress information as the net is trained:
+        if epochs < 30 or t % 10 == 0:
+            print('epoch {:4d}: MSE={:.5f}, RMSE={:.5f} ={:.2f}%'
+                  .format(t, mse, rmse, perc_loss))
+    if show_plots:
+        plot_errors(errors, metric)
+        y_actual = train_data.dataset.tensors[1]
+        y_pred = model(train_data.dataset.tensors[0])
+        plotResults(y_actual, y_pred)
+
+def train_anfis(model, data, epochs=500, show_plots=False, metric="rmse"):
     '''
         Train the given model using the given (x,y) data.
     '''
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-4, momentum=0.99)
     criterion = torch.nn.MSELoss(reduction='sum')
-    train_anfis_with(model, data, optimizer, criterion, epochs, show_plots)
+    return train_anfis_with(model, data, optimizer, criterion, epochs, show_plots, metric)
+
+
+def train_anfis_cv(model, train_data, test_data, epochs=500, show_plots=False, metric="rmse"):
+    '''
+        Train the given model using the given (x,y) data.
+    '''
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-4, momentum=0.99)
+    criterion = torch.nn.MSELoss(reduction='sum')
+    return train_anfis_with_cv(model, train_data, test_data, optimizer, criterion, epochs, show_plots, metric)
 
 
 if __name__ == '__main__':
-    x = torch.arange(1, 100, dtype=dtype).unsqueeze(1)
-    y = torch.pow(x, 3)
-    model, errors = linear_model(x, y, 100)
-    plotErrors(errors)
-    plotResults(y, model(x))
+    # x = torch.arange(1, 100, dtype=dtype).unsqueeze(1)
+    # y = torch.pow(x, 3)
+    # model, errors = linear_model(x, y, 100)
+    # plot_errors(errors)
+    # plotResults(y, model(x))
+    s = {"mse": [1], "rmse": [(2, 3), (5, 6)]}
+    print(isinstance(s["mse"][0], int))
+    print(isinstance(s["mse"][0], tuple))
+    print(isinstance(s["rmse"][0], tuple))
+    print(isinstance(s["rmse"][0], int))
