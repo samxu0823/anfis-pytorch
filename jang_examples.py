@@ -14,7 +14,7 @@ from torch.utils.data import TensorDataset, DataLoader
 
 import anfis
 from membership import BellMembFunc, make_bell_mfs
-from experimental import train_anfis, test_anfis
+from experimental import train_anfis, test_anfis, train_anfis_cv, plot_all_mfs
 
 dtype = torch.float
 
@@ -38,6 +38,14 @@ def make_sinc_xy(batch_size=1024):
         Use the range (-10,10) that was used in sec. V of Jang's paper.
     '''
     pts = torch.arange(-10, 11, 2)
+    x = torch.tensor(list(itertools.product(pts, pts)), dtype=dtype)
+    y = torch.tensor([[sinc(*p)] for p in x], dtype=dtype)
+    td = TensorDataset(x, y)
+    return DataLoader(td, batch_size=batch_size, shuffle=True)
+
+
+def make_sinc_xy_test(batch_size=1024):
+    pts = torch.arange(-3, 3, 2)
     x = torch.tensor(list(itertools.product(pts, pts)), dtype=dtype)
     y = torch.tensor([[sinc(*p)] for p in x], dtype=dtype)
     td = TensorDataset(x, y)
@@ -291,7 +299,11 @@ if __name__ == '__main__':
     if example == '1':
         model = ex1_model()
         train_data = make_sinc_xy()
-        train_anfis(model, train_data, 20, show_plots)
+        a, b = train_data.dataset.tensors
+        cv_data = make_sinc_xy_test()
+        plot_all_mfs(model, a)
+        # train_anfis(model, train_data, 20, show_plots)
+        train_anfis_cv(model, [train_data, cv_data], 20, show_plots, metric="rmse")
     elif example == '2':
         model = ex2_model()
         train_data = ex2_training_data()
