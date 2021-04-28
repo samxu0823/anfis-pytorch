@@ -40,11 +40,13 @@ def my_model(inp):
     :return:
     """
     invardefs = [
-        ('x0', make_bell_mfs(2, 2, np.linspace(min(inp[:, 0]), max(inp[:, 0]), 2))),
-        ('x1', make_bell_mfs(2, 2, np.linspace(min(inp[:, 1]), max(inp[:, 1]), 2))),
-        ('x2', make_bell_mfs(2, 2, np.linspace(min(inp[:, 2]), max(inp[:, 2]), 2)))]
+        ('x0', make_bell_mfs(2, 2, np.linspace(min(inp[:, 0]), max(inp[:, 0]), 3))),
+        ('x1', make_bell_mfs(2, 2, np.linspace(min(inp[:, 1]), max(inp[:, 1]), 3))),
+        ('x2', make_bell_mfs(2, 2, np.linspace(min(inp[:, 2]), max(inp[:, 2]), 3)))]
     outvars = ['m1']
     model = anfis.AnfisNet('My_Anfis', invardefs, outvars)
+    rules = [[0, 0, 0], [1, 0, 2], [2, 1, 0]]
+    model.set_rules(rules)
     return model
 
 
@@ -63,7 +65,7 @@ if __name__ == "__main__":
     val_data = load_dataset(file_name_xval, file_name_yval, num_input=3, start=1, path=path)
     x_train, _ = training_data.dataset.tensors
     my_model = my_model(x_train)
-    plot_all_mfs(my_model, x_train)
+    # plot_all_mfs(my_model, x_train)
     train_anfis_cv(my_model, [training_data, test_data], 300, show_plots=True, metric="rmse")
     y_test_pre, y_tar_pre = test_anfis(my_model, val_data, True)
     plt.figure()
