@@ -17,7 +17,7 @@ import torch
 import torch.nn.functional as F
 
 
-dtype = torch.float
+dtype = torch.float64
 
 
 class FuzzifyVariable(torch.nn.Module):

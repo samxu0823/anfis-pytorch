@@ -153,6 +153,7 @@ def test_anfis(model, data, show_plots=False):
           .format(mse, rmse, perc_loss))
     if show_plots:
         plot_results(y_actual, y_pred)
+    return y_pred, y_actual
 
 
 def train_anfis_with(model, data, optimizer, criterion,
@@ -291,7 +292,7 @@ def train_anfis_cv(model, data, epochs=500, show_plots=False, metric="rmse"):
     :return:
     see return of train_anfis_with_cv.
     """
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-4, momentum=0.99)
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-1, momentum=0.99)
     criterion = torch.nn.MSELoss(reduction='sum')
     return train_anfis_with_cv(model, data, optimizer, criterion, epochs, show_plots, metric)
 

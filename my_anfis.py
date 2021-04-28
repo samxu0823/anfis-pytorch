@@ -48,12 +48,26 @@ def my_model(inp):
     return model
 
 
+def my_plot(y_pre, y_tar, title):
+    plt.figure()
+    plt.scatter(range(len(y_pre)), y_pre, label="prediction", color="b", marker="x")
+    plt.scatter(range(len(y_tar)), y_tar, label="target", color="r", marker="o", alpha=0.6)
+    plt.title = title
+    plt.legend()
+    plt.show()
+
+
 if __name__ == "__main__":
     training_data = load_dataset(file_name_xtrain, file_name_ytrain, num_input=3, start=1, path=path)
-    x_train, _ = training_data.dataset.tensors
     test_data = load_dataset(file_name_xtest, file_name_ytest, num_input=3, start=1, path=path)
     val_data = load_dataset(file_name_xval, file_name_yval, num_input=3, start=1, path=path)
+    x_train, _ = training_data.dataset.tensors
     my_model = my_model(x_train)
     plot_all_mfs(my_model, x_train)
-    train_anfis_cv(my_model, [training_data, test_data], 200, show_plots=True, metric="rmse")
-    test_anfis(my_model, val_data, True)
+    train_anfis_cv(my_model, [training_data, test_data], 300, show_plots=True, metric="rmse")
+    y_test_pre, y_tar_pre = test_anfis(my_model, val_data, True)
+    plt.figure()
+    plt.scatter(range(y_tar_pre.size()[0]), y_tar_pre.detach().numpy(), color='r', marker='o', label="target")
+    plt.scatter(range(y_test_pre.size()[0]), y_test_pre.detach().numpy(), color='b', marker='x', label="prediction")
+    plt.legend()
+    plt.show()
