@@ -6,6 +6,7 @@
 """
 
 import matplotlib.pyplot as plt
+import time
 
 import torch
 import torch.nn.functional as F
@@ -67,14 +68,14 @@ def plot_errors(err, metric, test_data=False):
         plt.figure()
         error = err[metric]
         plt.plot(range(len(error)), error, '-ro', label='errors')
-        plt.ylabel(f"{metric}")
-        plt.xlabel('Epoch')
     else:
         plt.figure()
         train_error = [x for x, _ in err[metric]]
         test_error = [x for _, x in err[metric]]
         plt.plot(range(len(train_error)), train_error, marker='o', color='r', label='Training')
         plt.plot(range(len(test_error)), test_error, marker='x', color='b', label='Test')
+    plt.ylabel(f"{metric}")
+    plt.xlabel('Epoch')
     plt.legend()
     plt.show()
 
@@ -131,10 +132,13 @@ def calc_error(y_pred, y_actual):
         rmse = torch.sqrt(tot_loss).item()
         perc_loss = torch.mean(100. * torch.abs((y_pred - y_actual)
                                / y_actual))
-    return(tot_loss, rmse, perc_loss)
+        ss_tot = torch.sum((y_pred - torch.mean(y_pred)).pow(2))
+        ss_res = torch.sum((y_pred - y_actual).pow(2))
+        r2 = 1 - ss_res / ss_tot
+    return(tot_loss, rmse, perc_loss, r2)
 
 
-def test_anfis(model, data, show_plots=False):
+def test_anfis(model, data, train=None, show_plots=False):
     """
     Do a single forward pass with x and compare with y_actual.
     :param model: [AnfisNet], anfis model after training.
@@ -144,13 +148,17 @@ def test_anfis(model, data, show_plots=False):
     """
 
     x_test, y_actual = data.dataset.tensors
+    x_train, _ = train.dataset.tensors
     if show_plots:
-        plot_all_mfs(model, x_test)
+        if train is not None:
+            plot_all_mfs(model, x_train)
+        else:
+            plot_all_mfs(model, x_test)
     print('### Testing for {} cases'.format(x_test.shape[0]))
     y_pred = model(x_test)
-    mse, rmse, perc_loss = calc_error(y_pred, y_actual)
-    print('MS error={:.5f}, RMS error={:.5f}, percentage={:.2f}%'
-          .format(mse, rmse, perc_loss))
+    mse, rmse, perc_loss, r2 = calc_error(y_pred, y_actual)
+    print('R2 = {:.4f}, MS error={:.5f}, RMS error={:.5f}, percentage={:.2f}%'
+          .format(r2, mse, rmse, perc_loss))
     if show_plots:
         plot_results(y_actual, y_pred)
     return y_pred, y_actual
@@ -181,7 +189,7 @@ def train_anfis_with(model, data, optimizer, criterion,
             model.fit_coeff(x, y_actual)
         # Get the error rate for the whole batch:
         y_pred = model(x)
-        mse, rmse, perc_loss = calc_error(y_pred, y_actual)
+        mse, rmse, perc_loss, _ = calc_error(y_pred, y_actual)
         errors["mse"].append(mse)
         errors["rmse"].append(rmse)
         errors["PE"].append(perc_loss)
@@ -214,6 +222,7 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
     y_actual: [tensor], Target y value.
     y_pred: [tensor], Prediction by x_train using trained model.
     """
+    time_start = time.time()
     test = False    # Using test data during training or not
     if isinstance(data, list):
         test = True
@@ -242,12 +251,12 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
             model.fit_coeff(x_train, y_train_actual)
         # Get the error rate for the whole batch:
         y_train_pred = model(x_train)
-        mse, rmse, perc_loss = calc_error(y_train_pred, y_train_actual)
+        mse, rmse, perc_loss, _ = calc_error(y_train_pred, y_train_actual)
         if test:
             x_test, y_test_actual = test_data.dataset.tensors   # test data in sequence
             # for x_test, y_test_actual in test_data:   random test data set
             y_test_pred = model(x_test)
-            test_mse, test_rmse, test_perc_loss = calc_error(y_test_pred, y_test_actual)
+            test_mse, test_rmse, test_perc_loss, _ = calc_error(y_test_pred, y_test_actual)
             mse = (mse, test_mse)
             rmse = (rmse, test_rmse)
             perc_loss = (perc_loss, test_perc_loss)
@@ -263,6 +272,11 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
                 train_error = errors[metric][-1][0]
                 test_error = errors[metric][-1][1]
                 print(f'epoch {t}: Train {metric}={train_error:.5f}, Test {metric}={test_error:.5f}')
+    test_err = [x for _, x in errors[metric]]
+    time_end = time.time()
+    print("training time:", time_end - time_start)
+    print("min. test error:", min(test_err))
+    print("epoch:", test_err.index(min(test_err)) + 1)
     x_train = train_data.dataset.tensors[0]
     y_actual = train_data.dataset.tensors[1]
     y_pred = model(x_train)

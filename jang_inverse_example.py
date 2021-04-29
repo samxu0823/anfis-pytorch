@@ -142,7 +142,7 @@ def test_control_model(model, size=300, and_plot=True):
         plt.legend(loc='upper right')
         plt.hlines(y=0, xmin=0, xmax=size, linestyle=':', color='grey')
         plt.show()
-    mse, rmse, perc_loss = experimental.calc_error(
+    mse, rmse, perc_loss, _ = experimental.calc_error(
             torch.tensor(y_act), torch.tensor(y_desired))
     print('On {} test cases, MSE={:.5f}, RMSE={:.5f} ={:.2f}%'
           .format(size, mse, rmse, perc_loss))
