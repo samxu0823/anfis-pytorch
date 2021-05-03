@@ -16,7 +16,7 @@ import anfis
 from membership import BellMembFunc, make_bell_mfs
 from experimental import train_anfis, test_anfis, train_anfis_cv, plot_all_mfs
 
-dtype = torch.float
+dtype = torch.float64
 
 
 # ##### Example 1: Modeling a Two-Input Nonlinear Function #####

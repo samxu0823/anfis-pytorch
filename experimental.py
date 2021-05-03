@@ -80,6 +80,14 @@ def plot_errors(err, metric, test_data=False):
     plt.show()
 
 
+def plot_errors_class(err):
+    plt.figure()
+    plt.plot(range(len(err)), err, '-ro')
+    plt.ylabel("Cross Entropy")
+    plt.xlabel('Epoch')
+    plt.show()
+
+
 def plot_results(y_actual, y_predicted):
     '''
         Plot the actual and predicted y values (in different colours).
@@ -87,6 +95,14 @@ def plot_results(y_actual, y_predicted):
     plt.plot(range(len(y_predicted)), y_predicted.detach().numpy(),
              'r', label='trained')
     plt.plot(range(len(y_actual)), y_actual.numpy(), 'b', label='original')
+    plt.legend(loc='upper left')
+    plt.show()
+
+
+def plot_results_class(y_actual, y_predicted):
+    a = 1
+    plt.scatter(range(len(y_predicted)), y_predicted.detach().numpy(), color='r', marker='o', alpha=0.5, label='trained')
+    plt.scatter(range(len(y_actual)), y_actual.numpy(), color='b', marker='x', label='original')
     plt.legend(loc='upper left')
     plt.show()
 
@@ -135,7 +151,14 @@ def calc_error(y_pred, y_actual):
         ss_tot = torch.sum((y_pred - torch.mean(y_pred)).pow(2))
         ss_res = torch.sum((y_pred - y_actual).pow(2))
         r2 = 1 - ss_res / ss_tot
-    return(tot_loss, rmse, perc_loss, r2)
+    return tot_loss, rmse, perc_loss, r2
+
+
+def calc_error_class(y_pred, y_actual):
+    with torch.no_grad():
+        error = torch.nn.CrossEntropyLoss()
+        current = error(y_pred, y_actual.squeeze().long())
+    return current
 
 
 def test_anfis(model, data, train=None, show_plots=False):
@@ -148,9 +171,9 @@ def test_anfis(model, data, train=None, show_plots=False):
     """
 
     x_test, y_actual = data.dataset.tensors
-    x_train, _ = train.dataset.tensors
     if show_plots:
         if train is not None:
+            x_train, _ = train.dataset.tensors
             plot_all_mfs(model, x_train)
         else:
             plot_all_mfs(model, x_test)
@@ -165,17 +188,21 @@ def test_anfis(model, data, train=None, show_plots=False):
 
 
 def train_anfis_with(model, data, optimizer, criterion,
-                     epochs=500, show_plots=False, metric="rmse"):
+                     epochs=500, show_plots=False, metric="rmse", mode="regression"):
     '''
         Train the given model using the given (x,y) data.
     '''
     errors = {"mse": [], "rmse": [], "PE": []}  # Keep a dict of these for plotting afterwards
+    if mode == "classification":
+        err = []
     # optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     print('### Training for {} epochs, training size = {} cases'.
           format(epochs, data.dataset.tensors[0].shape[0]))
     for t in range(epochs):
         # Process each mini-batch in turn:
         for x, y_actual in data:    # Random x: data loader will shuffle the x, y pairs in every epoch
+            if mode == "classification":
+                y_actual = y_actual.squeeze().long()
             y_pred = model(x)
             # Compute and print loss
             loss = criterion(y_pred, y_actual)
@@ -189,20 +216,31 @@ def train_anfis_with(model, data, optimizer, criterion,
             model.fit_coeff(x, y_actual)
         # Get the error rate for the whole batch:
         y_pred = model(x)
-        mse, rmse, perc_loss, _ = calc_error(y_pred, y_actual)
-        errors["mse"].append(mse)
-        errors["rmse"].append(rmse)
-        errors["PE"].append(perc_loss)
-        # Print some progress information as the net is trained:
-        if epochs < 30 or t % 10 == 0:
-            print('epoch {:4d}: MSE={:.5f}, RMSE={:.5f} ={:.2f}%'
-                  .format(t, mse, rmse, perc_loss))
+        if mode == "regression":
+            mse, rmse, perc_loss, _ = calc_error(y_pred, y_actual)
+            errors["mse"].append(mse)
+            errors["rmse"].append(rmse)
+            errors["PE"].append(perc_loss)
+            # Print some progress information as the net is trained:
+            if epochs < 30 or t % 10 == 0:
+                print('epoch {:4d}: MSE={:.5f}, RMSE={:.5f} ={:.2f}%'
+                      .format(t, mse, rmse, perc_loss))
+        if mode == "classification":
+            ce = calc_error_class(y_pred, y_actual)
+            err.append(ce)
+            if epochs < 30 or t % 10 == 0:
+                print('epoch {:4d}: CrossEntropy={:.5f}%'
+                      .format(t, ce))
     # End of training, so graph the results:
     if show_plots:
-        plot_errors(errors, metric)
         y_actual = data.dataset.tensors[1]
         y_pred = model(data.dataset.tensors[0])
-        plot_results(y_actual, y_pred)
+        if mode == "regression":
+            plot_errors(errors, metric)
+            plot_results(y_actual, y_pred)
+        elif mode == "classification":
+            plot_errors_class(err)
+            plot_results_class(y_actual, torch.argmax(y_pred, dim=1))
     return x, y_pred, y_actual
 
 

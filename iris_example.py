@@ -16,7 +16,7 @@ from torch.utils.data import TensorDataset, DataLoader
 import anfis
 from membership import make_gauss_mfs, make_anfis
 import experimental
-
+dtype = torch.float64
 
 def make_one_hot(data, num_categories, dtype=torch.float):
     '''
@@ -54,8 +54,8 @@ def get_iris_data(in_feat=2, batch_size=1024):
         The y values are just the number indicating the category.
     '''
     d = sklearn.datasets.load_iris()
-    x = torch.Tensor(d.data[:, :in_feat])
-    y = torch.Tensor(d.target).unsqueeze(1)
+    x = torch.tensor(d.data[:, :in_feat], dtype=dtype)
+    y = torch.tensor(d.target, dtype=dtype).unsqueeze(1)
     td = TensorDataset(x, y)
     return DataLoader(td, batch_size=batch_size, shuffle=False)
 
@@ -119,9 +119,11 @@ def train_non_hybrid(in_feat=2):
     x, y_actual = train_data.dataset.tensors
     model = make_anfis(x, num_mfs=3, num_out=3, hybrid=False)
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-2, momentum=0.99)
-    def criterion(input, target):  # change the dim and type
-        return torch.nn.CrossEntropyLoss()(input, target.squeeze().long())
-    experimental.train_anfis_with(model, train_data, optimizer, criterion, 250)
+    cri = torch.nn.CrossEntropyLoss()
+    # def criterion(input, target):  # change the dim and type
+    #     return torch.nn.CrossEntropyLoss()(input, target.squeeze().long())
+    experimental.train_anfis_with(model, train_data, optimizer, cri, 1000, show_plots=True, mode="classification")
+    # experimental.train_anfis_with(model, train_data, optimizer, criterion, 50, show_plots=True)
     y_pred = model(x)
     nc = torch.sum(y_actual.squeeze().long() == torch.argmax(y_pred, dim=1))
     tot = len(x)
@@ -130,5 +132,6 @@ def train_non_hybrid(in_feat=2):
     return model
 
 
-model = train_non_hybrid()
-# print(model.coeff)
+if __name__ == "__main__":
+    model = train_non_hybrid()
+    # print(model.coeff)

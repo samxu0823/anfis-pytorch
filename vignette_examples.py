@@ -16,7 +16,7 @@ import jang_examples
 from membership import BellMembFunc, GaussMembFunc,\
     make_gauss_mfs, make_bell_mfs, make_tri_mfs, make_trap_mfs
 
-dtype = torch.float
+dtype = torch.float64
 
 
 def vignette_ex1():
@@ -215,47 +215,49 @@ def vignette_ex5_trained():
 
 
 if __name__ == '__main__':
-    example = '3a'
+    example = '5T'
     show_plots = True
     if len(sys.argv) == 2:  # One arg: example
         example = sys.argv[1].upper()
         show_plots = False
     print('Example {} from Vignette paper'.format(example))
-    if example == '1':
+    if example == '1':  # 4 Bell MF
         model = vignette_ex1()
         train_data = jang_examples.make_sinc_xy_large()
         train_anfis(model, train_data, 100, show_plots)
     elif example == '1T':
         model = vignette_ex1_trained()
         test_data = jang_examples.make_sinc_xy()
-        test_anfis(model, test_data, show_plots)
-    elif example == '2':
+        test_anfis(model, test_data, None, show_plots)
+    elif example == '2':    # 5 Bell MF
         model = vignette_ex2()
         train_data = jang_examples.make_sinc_xy_large(1000)
-        train_anfis(model, train_data, 100, show_plots)
-    elif example == '3':
+        train_anfis(model, train_data, 100, show_plots, metric="mse")
+    elif example == '3':    # Gaussian MF
         model = vignette_ex3()
         train_data = jang_examples.make_sinc_xy_large()
         train_anfis(model, train_data, 50, show_plots)
-    elif example == '3a':
+    elif example == '3a':   # Triangular MF
         model = vignette_ex3a()
         train_data = jang_examples.make_sinc_xy_large(1000)
-        model.layer.fuzzify.show()
+        # plot_all_mfs(model, train_data.dataset.tensors[0])
+        # model.layer.fuzzify.show()
         train_anfis(model, train_data, 250, show_plots)
-        model.layer.fuzzify.show()
-    elif example == '3b':
+        # plot_all_mfs(model, train_data.dataset.tensors[0])
+        # model.layer.fuzzify.show()
+    elif example == '3b':   # Trapezoid MF
         model = vignette_ex3b()
         train_data = jang_examples.make_sinc_xy_large(1000)
         plot_all_mfs(model, train_data.dataset.tensors[0])
         train_anfis(model, train_data, 250, show_plots)
         plot_all_mfs(model, train_data.dataset.tensors[0])
-    elif example == '5':
+    elif example == '5':    # Multi output: 2 output
         model = vignette_ex5()
         train_data = jang_examples.make_sinc_xy2()
         train_anfis(model, train_data, 50, show_plots)
     elif example == '5T':
         model = vignette_ex5_trained()
         test_data = jang_examples.make_sinc_xy2()
-        test_anfis(model, test_data, show_plots)
+        test_anfis(model, test_data, None, show_plots)
     else:
         print('ERROR - no such example')
