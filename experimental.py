@@ -19,6 +19,7 @@ class TwoLayerNet(torch.nn.Module):
         From the pytorch examples, a simjple 2-layer neural net.
         https://pytorch.org/tutorials/beginner/pytorch_with_examples.html
     '''
+
     def __init__(self, d_in, hidden_size, d_out):
         super(TwoLayerNet, self).__init__()
         self.linear1 = torch.nn.Linear(d_in, hidden_size)
@@ -100,8 +101,8 @@ def plot_results(y_actual, y_predicted):
 
 
 def plot_results_class(y_actual, y_predicted):
-    a = 1
-    plt.scatter(range(len(y_predicted)), y_predicted.detach().numpy(), color='r', marker='o', alpha=0.5, label='trained')
+    plt.scatter(range(len(y_predicted)), y_predicted.detach().numpy(), color='r', marker='o', alpha=0.5,
+                label='trained')
     plt.scatter(range(len(y_actual)), y_actual.numpy(), color='b', marker='x', label='original')
     plt.legend(loc='upper left')
     plt.show()
@@ -147,7 +148,7 @@ def calc_error(y_pred, y_actual):
         tot_loss = F.mse_loss(y_pred, y_actual)
         rmse = torch.sqrt(tot_loss).item()
         perc_loss = torch.mean(100. * torch.abs((y_pred - y_actual)
-                               / y_actual))
+                                                / y_actual))
         ss_tot = torch.sum((y_pred - torch.mean(y_pred)).pow(2))
         ss_res = torch.sum((y_pred - y_actual).pow(2))
         r2 = 1 - ss_res / ss_tot
@@ -158,15 +159,18 @@ def calc_error_class(y_pred, y_actual):
     with torch.no_grad():
         error = torch.nn.CrossEntropyLoss()
         current = error(y_pred, y_actual.squeeze().long())
-    return current
+        no_right = torch.sum(torch.argmax(y_pred, dim=1) == y_actual.squeeze().long())
+        accuracy = no_right / y_pred.size()[0]
+    return current, accuracy
 
 
-def test_anfis(model, data, train=None, show_plots=False):
+def test_anfis(model, data, train=None, show_plots=False, mode="r"):
     """
     Do a single forward pass with x and compare with y_actual.
     :param model: [AnfisNet], anfis model after training.
     :param data: [DataLoader], test data set.
     :param show_plots: [boolean], show membership function after training and result.
+    :param mode: [str], choose "r" train the anfis regressor, choose "c" train the anfis classifier.
     :return:
     """
 
@@ -179,11 +183,19 @@ def test_anfis(model, data, train=None, show_plots=False):
             plot_all_mfs(model, x_test)
     print('### Testing for {} cases'.format(x_test.shape[0]))
     y_pred = model(x_test)
-    mse, rmse, perc_loss, r2 = calc_error(y_pred, y_actual)
-    print('R2 = {:.4f}, MS error={:.5f}, RMS error={:.5f}, percentage={:.2f}%'
-          .format(r2, mse, rmse, perc_loss))
+    if mode == "r":
+        mse, rmse, perc_loss, r2 = calc_error(y_pred, y_actual)
+        print('R2 = {:.4f}, MS error={:.5f}, RMS error={:.5f}, percentage={:.2f}%'
+              .format(r2, mse, rmse, perc_loss))
+    else:
+        ce, accuracy = calc_error_class(y_pred, y_actual)
+        print('Cross Entropy = {:.4f}, accuracy = {:.4f}'
+              .format(ce, accuracy))
     if show_plots:
-        plot_results(y_actual, y_pred)
+        if mode == "r":
+            plot_results(y_actual, y_pred)
+        else:
+            plot_results_class(y_actual, torch.argmax(y_pred, dim=1))
     return y_pred, y_actual
 
 
@@ -200,7 +212,7 @@ def train_anfis_with(model, data, optimizer, criterion,
           format(epochs, data.dataset.tensors[0].shape[0]))
     for t in range(epochs):
         # Process each mini-batch in turn:
-        for x, y_actual in data:    # Random x: data loader will shuffle the x, y pairs in every epoch
+        for x, y_actual in data:  # Random x: data loader will shuffle the x, y pairs in every epoch
             if mode == "classification":
                 y_actual = y_actual.squeeze().long()
             y_pred = model(x)
@@ -226,11 +238,11 @@ def train_anfis_with(model, data, optimizer, criterion,
                 print('epoch {:4d}: MSE={:.5f}, RMSE={:.5f} ={:.2f}%'
                       .format(t, mse, rmse, perc_loss))
         if mode == "classification":
-            ce = calc_error_class(y_pred, y_actual)
+            ce, accuracy = calc_error_class(y_pred, y_actual)
             err.append(ce)
             if epochs < 30 or t % 10 == 0:
-                print('epoch {:4d}: CrossEntropy={:.5f}%'
-                      .format(t, ce))
+                print('epoch {:4d}: CrossEntropy={:.5f}, Accuracy={:.3f}%'
+                      .format(t, ce, accuracy))
     # End of training, so graph the results:
     if show_plots:
         y_actual = data.dataset.tensors[1]
@@ -241,11 +253,11 @@ def train_anfis_with(model, data, optimizer, criterion,
         elif mode == "classification":
             plot_errors_class(err)
             plot_results_class(y_actual, torch.argmax(y_pred, dim=1))
-    return x, y_pred, y_actual
+    return x, y_pred, y_actual,
 
 
 def train_anfis_with_cv(model, data, optimizer, criterion,
-                     epochs=500, show_plots=False, metric="mse"):
+                        epochs=500, show_plots=False, metric="mse"):
     """
     Train the given model using training data, meanwhile use test data to test the model in every epoch.
     :param model: [AnfisNet], the given model.
@@ -261,7 +273,15 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
     y_pred: [tensor], Prediction by x_train using trained model.
     """
     time_start = time.time()
-    test = False    # Using test data during training or not
+    test = False  # Using test data during training or not
+    classifier = False  # Regression or classification
+
+    if isinstance(criterion, torch.nn.MSELoss):  # Regression
+        errors = {"mse": [], "rmse": [], "PE": []}  # Keep a dict of these for plotting afterwards
+    elif isinstance(criterion, torch.nn.CrossEntropyLoss):  # Classification
+        classifier = True
+        errors = {"ce": [], "acc": []}  # Keep a dict of Cross Entropy for plotting afterwards
+
     if isinstance(data, list):
         test = True
         train_data, test_data = data
@@ -271,41 +291,55 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
         train_data = data
         print('### Training for {} epochs, training size = {} cases'.
               format(epochs, train_data.dataset.tensors[0].shape[0]))
-    errors = {"mse": [], "rmse": [], "PE": []}  # Keep a dict of these for plotting afterwards
 
     for t in range(epochs):
         # Process each mini-batch in turn:
         for x_train, y_train_actual in train_data:  # Random x: data loader will shuffle the x, y pairs in every epoch
             y_train_pred = model(x_train)
             # Compute and print loss
-            loss = criterion(y_train_pred, y_train_actual)
+            loss = criterion(y_train_pred, y_train_actual) if not classifier else \
+                criterion(y_train_pred, y_train_actual.squeeze().long())
             # Zero gradients, perform a backward pass, and update the weights(Premise parameter).
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         # Epoch ending, so now fit the coefficients(Consequent parameter) based on all data:
-        x_train, y_train_actual = train_data.dataset.tensors    # Training data in sequence
+        x_train, y_train_actual = train_data.dataset.tensors  # Training data in sequence
         with torch.no_grad():
             model.fit_coeff(x_train, y_train_actual)
         # Get the error rate for the whole batch:
         y_train_pred = model(x_train)
-        mse, rmse, perc_loss, _ = calc_error(y_train_pred, y_train_actual)
+        if not classifier:
+            mse, rmse, perc_loss, _ = calc_error(y_train_pred, y_train_actual)
+        else:
+            ce, accuracy = calc_error_class(y_train_pred, y_train_actual)
         if test:
-            x_test, y_test_actual = test_data.dataset.tensors   # test data in sequence
+            x_test, y_test_actual = test_data.dataset.tensors  # test data in sequence
             # for x_test, y_test_actual in test_data:   random test data set
             y_test_pred = model(x_test)
-            test_mse, test_rmse, test_perc_loss, _ = calc_error(y_test_pred, y_test_actual)
-            mse = (mse, test_mse)
-            rmse = (rmse, test_rmse)
-            perc_loss = (perc_loss, test_perc_loss)
-        errors["mse"].append(mse)
-        errors["rmse"].append(rmse)
-        errors["PE"].append(perc_loss)
+            if not classifier:
+                test_mse, test_rmse, test_perc_loss, _ = calc_error(y_test_pred, y_test_actual)
+                mse = (mse, test_mse)
+                rmse = (rmse, test_rmse)
+                perc_loss = (perc_loss, test_perc_loss)
+                errors["mse"].append(mse)
+                errors["rmse"].append(rmse)
+                errors["PE"].append(perc_loss)
+            else:
+                test_ce, test_accuracy = calc_error_class(y_test_pred, y_test_actual)
+                ce = (ce, test_ce)
+                accuracy = (accuracy, test_accuracy)
+                errors["ce"].append(ce)
+                errors["acc"].append(accuracy)
         # Print some progress information as the net is trained:
         if epochs < 30 or t % 10 == 0:
             if not test:
-                print('epoch {:4d}: MSE={:.5f}, RMSE={:.5f}, PE ={:.2f}%'
-                      .format(t, mse, rmse, perc_loss))
+                if not classifier:
+                    print('epoch {:4d}: MSE={:.5f}, RMSE={:.5f}, PE ={:.2f}%'
+                          .format(t, mse, rmse, perc_loss))
+                elif classifier:
+                    print('epoch {:4d}: CrossEntropy={:.5f}, Accuracy={:.3f}%'
+                          .format(t, ce, accuracy))
             else:
                 train_error = errors[metric][-1][0]
                 test_error = errors[metric][-1][1]
@@ -313,15 +347,26 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
     test_err = [x for _, x in errors[metric]]
     time_end = time.time()
     print("training time:", time_end - time_start)
-    print("min. test error:", min(test_err))
-    print("epoch:", test_err.index(min(test_err)) + 1)
+    if metric == "acc":
+        print("max. test accuracy:", max(test_err))
+        print("epoch:", test_err.index(max(test_err)) + 1)
+    else:
+        print("min. test error:", min(test_err))
+        print("epoch:", test_err.index(min(test_err)) + 1)
     x_train = train_data.dataset.tensors[0]
-    y_actual = train_data.dataset.tensors[1]
-    y_pred = model(x_train)
+    y_train_actual = train_data.dataset.tensors[1]
+    x_test = test_data.dataset.tensors[0]
+    y_test_actual = test_data.dataset.tensors[1]
+    y_train_pred = model(x_train)
+    y_test_pred = model(x_test)
     if show_plots:
         plot_errors(errors, metric, test)
-        plot_results(y_actual, y_pred)
-    return x_train, y_actual, y_pred
+        if classifier:
+            plot_results_class(y_test_actual, torch.argmax(y_test_pred, dim=1))
+        else:
+            plot_results(y_test_actual, y_test_pred)
+
+    return x_train, y_train_actual, y_train_pred, y_test_actual, y_test_pred
 
 
 def train_anfis(model, data, epochs=500, show_plots=False, metric="rmse"):
@@ -333,7 +378,7 @@ def train_anfis(model, data, epochs=500, show_plots=False, metric="rmse"):
     return train_anfis_with(model, data, optimizer, criterion, epochs, show_plots, metric)
 
 
-def train_anfis_cv(model, data, epochs=500, show_plots=False, metric="rmse"):
+def train_anfis_cv(model, data, epochs=500, show_plots=False, metric="rmse", mode="r"):
     """
     Train the given model using the given (x,y) data.
     :param model: [AnfisNet], the given model.
@@ -341,11 +386,12 @@ def train_anfis_cv(model, data, epochs=500, show_plots=False, metric="rmse"):
     :param epochs: [int], no. of training epoch.
     :param show_plots: [boolean], show the learning curve.
     :param metric: [str], error used to plot curve.
+    :param mode: [str], choose "r" train the anfis regressor, choose "c" train the anfis classifier.
     :return:
     see return of train_anfis_with_cv.
     """
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-1, momentum=0.99)
-    criterion = torch.nn.MSELoss(reduction='sum')
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-2, momentum=0.99)
+    criterion = torch.nn.MSELoss(reduction='sum') if mode == "r" else torch.nn.CrossEntropyLoss()
     return train_anfis_with_cv(model, data, optimizer, criterion, epochs, show_plots, metric)
 
 

@@ -359,7 +359,7 @@ class AnfisNet(torch.nn.Module):
             cl = PlainConsequentLayer(self.num_in, self.num_rules, self.num_out)  # no hybrid: BP for consequent
         self.layer = torch.nn.ModuleDict(OrderedDict([
             ('fuzzify', FuzzifyLayer(mfdefs, varnames)),  # Layer 1
-            ('rules', AntecedentLayer(mfdefs)),  # Layer 2
+            ('rules', AntecedentLayer(mfdefs, grid=grid)),  # Layer 2
             # Layer 3: normalisation layer is just implemented as a function.
             ('consequent', cl),  # Layer 4
             # Layer 5: weighted-sum layer is just implemented as a function.
@@ -428,7 +428,7 @@ class AnfisNet(torch.nn.Module):
         self.y_pred = y_pred.squeeze(2)  # 3D -> 2D, due to single output system
         return self.y_pred
 
-    def set_rules(self, rules_index):
+    def set_rules(self, rules_index, hybrid=True):
         """
         Set fuzzy rules manually.
         :param rules_index: [list], list of indices of rules. E.g. [[0, 0, 0], [0, 0, 1], ...]
@@ -437,7 +437,10 @@ class AnfisNet(torch.nn.Module):
         void
         """
         self.num_rules = len(rules_index)
-        customized_c1 = ConsequentLayer(self.num_in, self.num_rules, self.num_out)
+        if hybrid:
+            customized_c1 = ConsequentLayer(self.num_in, self.num_rules, self.num_out)
+        else:
+            customized_c1 = PlainConsequentLayer(self.num_in, self.num_rules, self.num_out)
         self.layer['rules'].set_rules(rules_index)
         self.layer['consequent'] = customized_c1
 
