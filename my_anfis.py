@@ -191,27 +191,46 @@ def my_confusion_matrix(y_actual, y_pre, title, normalize="true"):
 
 if __name__ == "__main__":
     mode = "c"
+    save = False
+    load = True
+    load_path = "my_model/classification/my_model"
+
+    # Initialization
     training_data = load_dataset(file_name_xtrain, file_name_ytrain, num_input=10, start=1, path=path)
     test_data = load_dataset(file_name_xtest, file_name_ytest, num_input=10, start=1, path=path)
     val_data = load_dataset(file_name_xval, file_name_yval, num_input=10, start=1, path=path)
     x_train, _ = training_data.dataset.tensors
-    my_model = my_model_class(x_train)
-    print("mf before:", my_model.layer.fuzzify)
-    plot_all_mfs(my_model, x_train)
-    _, y_train_tar, y_train_pre, y_test_tar, y_test_pre = \
-        train_anfis_cv(my_model, [training_data, test_data], 5000, show_plots=True, metric="ce", mode="c")
-    y_val_pre, y_val_tar = test_anfis(my_model, val_data, training_data, True, mode="c")
+    if not load:
+        my_model = my_model_class(x_train)
+        print("mf before:", my_model.layer.fuzzify)
+        plot_all_mfs(my_model, x_train)
+
+        # Training
+        _, y_train_tar, y_train_pre, y_test_tar, y_test_pre = \
+            train_anfis_cv(my_model, [training_data, test_data], 10, show_plots=True, \
+                           metric="ce", mode="c", save=save, name="my_model", detail=False)
+        show_plot = True
+    else:
+        my_model = torch.load(load_path)
+        # my_model = torch.load(load_path)["model_info"]
+        show_plot = False
+
+    # Test
+    y_val_pre, y_val_tar = test_anfis(my_model, val_data, training_data, show_plot, mode="c")
     print("mf after:", my_model.layer.fuzzify)
-    if mode == "r":
+
+    # Visualization
+    if mode == "r":  # regression
         my_plot(y_val_pre.detach().numpy(), y_val_tar.detach().numpy(), "c1", "prediction")
         my_qq_plot(y_val_pre.detach().numpy(), y_val_tar.detach().numpy(), "QQ plot")
         # plt.scatter(range(y_val_tar.size()[0]), y_val_tar.detach().numpy(), color='r', marker='o', label="target")
         # plt.scatter(range(y_val_pre.size()[0]), y_val_pre.detach().numpy(), color='b', marker='x', label="prediction")
-    else:
-        my_confusion_matrix(y_train_tar.numpy(), np.vstack(torch.argmax(y_train_pre, dim=1).numpy()), "Training", None)
-        my_confusion_matrix(y_train_tar.numpy(), np.vstack(torch.argmax(y_train_pre, dim=1).numpy()), "Training", "true")
-        my_confusion_matrix(y_test_tar.numpy(), np.vstack(torch.argmax(y_test_pre, dim=1).numpy()), "Testing", None)
-        my_confusion_matrix(y_test_tar.numpy(), np.vstack(torch.argmax(y_test_pre, dim=1).numpy()), "Testing", "true")
+    else:  # classification
+        if not load:
+            my_confusion_matrix(y_train_tar.numpy(), np.vstack(torch.argmax(y_train_pre, dim=1).numpy()), "Training", None)
+            my_confusion_matrix(y_train_tar.numpy(), np.vstack(torch.argmax(y_train_pre, dim=1).numpy()), "Training", "true")
+            my_confusion_matrix(y_test_tar.numpy(), np.vstack(torch.argmax(y_test_pre, dim=1).numpy()), "Testing", None)
+            my_confusion_matrix(y_test_tar.numpy(), np.vstack(torch.argmax(y_test_pre, dim=1).numpy()), "Testing", "true")
         my_confusion_matrix(y_val_tar.numpy(), np.vstack(torch.argmax(y_val_pre, dim=1).numpy()), "Validation", None)
         my_confusion_matrix(y_val_tar.numpy(), np.vstack(torch.argmax(y_val_pre, dim=1).numpy()), "Validation", "true")
 

@@ -7,6 +7,8 @@
 
 import matplotlib.pyplot as plt
 import time
+import os
+from time import strftime, localtime
 
 import torch
 import torch.nn.functional as F
@@ -143,6 +145,31 @@ def plot_all_mfs(model, x):
         _plot_mfs(var_name, fv, x[:, i])
 
 
+def save_model(model, classifier, name="my_model", detail=False, ** other_dict):
+    """
+    Model saving module.
+    :param model: [AnfisNet], trained Anfis model.
+    :param classifier: [boolean], True is classification, False is regression.
+    :param name: [str], file name.
+    :param detail: [boolean], save the model with detailed or simplified information.
+    :param other_dict: [dict], contain model, optimizer, epoch and loss information.
+    :return:
+    void
+    """
+    # Defined path and create folder
+    model_type="Classification" if classifier else "Regression"
+    model_path = f"my_model/{model_type}"
+    folder = os.path.exists(model_path)
+    if not folder:
+        os.makedirs(model_path)
+    if not detail:
+        # default save module
+        torch.save(model, f"{model_path}/{name}")
+    else:
+        # customized save_module
+        torch.save(other_dict, f"{model_path}/{name}")
+
+
 def calc_error(y_pred, y_actual):
     with torch.no_grad():
         tot_loss = F.mse_loss(y_pred, y_actual)
@@ -257,9 +284,10 @@ def train_anfis_with(model, data, optimizer, criterion,
 
 
 def train_anfis_with_cv(model, data, optimizer, criterion,
-                        epochs=500, show_plots=False, metric="mse"):
+                        epochs=500, show_plots=False, metric="mse", save=False, name="my_model", detail=False):
     """
     Train the given model using training data, meanwhile use test data to test the model in every epoch.
+    :return:
     :param model: [AnfisNet], the given model.
     :param data: [DataLoader] or [list], training data or list of training data and test data.
     :param optimizer: [optim], optimizer.
@@ -267,6 +295,9 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
     :param epochs: [int], no. of training epoch.
     :param show_plots: [boolean], show the learning curve.
     :param metric: [str],  error used to plot curve.
+    :param save: [boolean], save the model or not.
+    :param name: [str], name of the saving file.
+    :param detail: [boolean], save the model with detailed or simplified information.
     :return:
     x_train: [tensor], x value from data set.
     y_actual: [tensor], Target y value.
@@ -348,17 +379,23 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
     time_end = time.time()
     print("training time:", time_end - time_start)
     if metric == "acc":
-        print("max. test accuracy:", max(test_err))
-        print("epoch:", test_err.index(max(test_err)) + 1)
+        m_test_err =max(test_err)
+        m_epoch = test_err.index(max(test_err)) + 1
+        print("max. test accuracy:", m_test_err)
+        print("epoch:", m_epoch)
     else:
-        print("min. test error:", min(test_err))
-        print("epoch:", test_err.index(min(test_err)) + 1)
+        m_test_err =min(test_err)
+        m_epoch = test_err.index(min(test_err)) + 1
+        print("min. test error:", m_test_err)
+        print("epoch:", m_epoch)
     x_train = train_data.dataset.tensors[0]
     y_train_actual = train_data.dataset.tensors[1]
     x_test = test_data.dataset.tensors[0]
     y_test_actual = test_data.dataset.tensors[1]
     y_train_pred = model(x_train)
     y_test_pred = model(x_test)
+
+    # show result plot and error plot
     if show_plots:
         plot_errors(errors, metric, test)
         if classifier:
@@ -366,6 +403,11 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
         else:
             plot_results(y_test_actual, y_test_pred)
 
+    # save optimal model
+    if save:
+        other_dict = {"epoch": m_epoch, "model_info": model, "optimizer": optimizer.state_dict(), \
+                      "best_loss": m_test_err} if detail else {}    # parameter list if detail is needed
+        save_model(model=model, classifier=classifier, name=name, detail=detail, ** other_dict)
     return x_train, y_train_actual, y_train_pred, y_test_actual, y_test_pred
 
 
@@ -378,7 +420,8 @@ def train_anfis(model, data, epochs=500, show_plots=False, metric="rmse"):
     return train_anfis_with(model, data, optimizer, criterion, epochs, show_plots, metric)
 
 
-def train_anfis_cv(model, data, epochs=500, show_plots=False, metric="rmse", mode="r"):
+def train_anfis_cv(model, data, epochs=500, show_plots=False, metric="rmse", mode="r",\
+                   save=False, name="my_model", detail=False):
     """
     Train the given model using the given (x,y) data.
     :param model: [AnfisNet], the given model.
@@ -387,12 +430,15 @@ def train_anfis_cv(model, data, epochs=500, show_plots=False, metric="rmse", mod
     :param show_plots: [boolean], show the learning curve.
     :param metric: [str], error used to plot curve.
     :param mode: [str], choose "r" train the anfis regressor, choose "c" train the anfis classifier.
+    :param save: [boolean], save the model or not.
+    :param name: [str], name of the saving file.
+    :param detail: [boolean], save the model with detailed or simplified information.
     :return:
     see return of train_anfis_with_cv.
     """
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-2, momentum=0.99)
     criterion = torch.nn.MSELoss(reduction='sum') if mode == "r" else torch.nn.CrossEntropyLoss()
-    return train_anfis_with_cv(model, data, optimizer, criterion, epochs, show_plots, metric)
+    return train_anfis_with_cv(model, data, optimizer, criterion, epochs, show_plots, metric, save, name, detail)
 
 
 if __name__ == '__main__':
