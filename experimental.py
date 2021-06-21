@@ -8,6 +8,7 @@
 import matplotlib.pyplot as plt
 import time
 import os
+import numpy as np
 from time import strftime, localtime
 
 import torch
@@ -120,9 +121,9 @@ def _plot_mfs(var_name, fv, x):
     :return:
     """
     # Sort x so we only plot each x-value once:
-    min = torch.min(x)
-    max = torch.max(x)
-    num = 100
+    min = -1
+    max = 2
+    num = 500
     x_in = torch.arange(min, max, (max - min) / num)
     for mfname, yvals in fv.fuzzify(x_in):
         plt.plot(x_in.tolist(), yvals.tolist(), label=mfname)
@@ -415,7 +416,7 @@ def train_anfis(model, data, epochs=500, show_plots=False, metric="rmse"):
     '''
         Train the given model using the given (x,y) data.
     '''
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-4, momentum=0.99)
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.99)
     criterion = torch.nn.MSELoss(reduction='sum')
     return train_anfis_with(model, data, optimizer, criterion, epochs, show_plots, metric)
 
@@ -436,7 +437,8 @@ def train_anfis_cv(model, data, epochs=500, show_plots=False, metric="rmse", mod
     :return:
     see return of train_anfis_with_cv.
     """
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-2, momentum=0.99)
+    # optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.99)
+    optimizer = torch.optim.Adam(model.parameters(), lr=5e-4, weight_decay=1e-4)
     criterion = torch.nn.MSELoss(reduction='sum') if mode == "r" else torch.nn.CrossEntropyLoss()
     return train_anfis_with_cv(model, data, optimizer, criterion, epochs, show_plots, metric, save, name, detail)
 
@@ -447,8 +449,10 @@ if __name__ == '__main__':
     # model, errors = linear_model(x, y, 100)
     # plot_errors(errors)
     # plot_results(y, model(x))
-    s = {"mse": [1], "rmse": [(2, 3), (5, 6)]}
-    print(isinstance(s["mse"][0], int))
-    print(isinstance(s["mse"][0], tuple))
-    print(isinstance(s["rmse"][0], tuple))
-    print(isinstance(s["rmse"][0], int))
+    # s = {"mse": [1], "rmse": [(2, 3), (5, 6)]}
+    # print(isinstance(s["mse"][0], int))
+    # print(isinstance(s["mse"][0], tuple))
+    # print(isinstance(s["rmse"][0], tuple))
+    # print(isinstance(s["rmse"][0], int))
+    a = np.array([[1, 6, 8, 10], [2, 9, 10, 2], [3, 10, 7, 5]])
+    print(a[-1, [-1]])
