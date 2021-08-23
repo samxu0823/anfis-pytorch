@@ -1,0 +1,55 @@
+Input variables
+Variable x0
+- mf0: GaussMembFunc(mu=0.0, sigma=0.5)
+- mf1: GaussMembFunc(mu=0.25, sigma=0.5)
+- mf2: GaussMembFunc(mu=0.5, sigma=0.5)
+- mf3: GaussMembFunc(mu=0.75, sigma=0.5)
+- mf4: GaussMembFunc(mu=1.0, sigma=0.5)
+Variable x1
+- mf0: GaussMembFunc(mu=0.0, sigma=0.5)
+- mf1: GaussMembFunc(mu=0.3333333432674408, sigma=0.5)
+- mf2: GaussMembFunc(mu=0.6666666865348816, sigma=0.5)
+- mf3: GaussMembFunc(mu=1.0, sigma=0.5)
+Variable x2
+- mf0: GaussMembFunc(mu=0.0, sigma=0.5)
+- mf1: GaussMembFunc(mu=0.5, sigma=0.5)
+- mf2: GaussMembFunc(mu=1.0, sigma=0.5)
+Variable x3
+- mf0: GaussMembFunc(mu=0.0, sigma=0.5)
+- mf1: GaussMembFunc(mu=0.5, sigma=0.5)
+- mf2: GaussMembFunc(mu=1.0, sigma=0.5)
+Variable x4
+- mf0: GaussMembFunc(mu=0.0, sigma=0.5)
+- mf1: GaussMembFunc(mu=0.1666666716337204, sigma=0.5)
+- mf2: GaussMembFunc(mu=0.3333333432674408, sigma=0.5)
+- mf3: GaussMembFunc(mu=0.5, sigma=0.5)
+- mf4: GaussMembFunc(mu=0.6666666865348816, sigma=0.5)
+- mf5: GaussMembFunc(mu=0.8333333134651184, sigma=0.5)
+- mf6: GaussMembFunc(mu=1.0, sigma=0.5)
+Variable x5
+- mf0: GaussMembFunc(mu=0.0, sigma=0.5)
+- mf1: GaussMembFunc(mu=0.5, sigma=0.5)
+- mf2: GaussMembFunc(mu=1.0, sigma=0.5)
+Variable x6
+- mf0: GaussMembFunc(mu=0.0, sigma=0.5)
+- mf1: GaussMembFunc(mu=0.25, sigma=0.5)
+- mf2: GaussMembFunc(mu=0.5, sigma=0.5)
+- mf3: GaussMembFunc(mu=0.75, sigma=0.5)
+- mf4: GaussMembFunc(mu=1.0, sigma=0.5)
+Variable x7
+- mf0: GaussMembFunc(mu=0.0, sigma=0.5)
+- mf1: GaussMembFunc(mu=0.25, sigma=0.5)
+- mf2: GaussMembFunc(mu=0.5, sigma=0.5)
+- mf3: GaussMembFunc(mu=0.75, sigma=0.5)
+- mf4: GaussMembFunc(mu=1.0, sigma=0.5)
+Variable x8
+- mf0: GaussMembFunc(mu=0.0, sigma=0.5)
+- mf1: GaussMembFunc(mu=1.0, sigma=0.5)
+Variable x9
+- mf0: GaussMembFunc(mu=0.0, sigma=0.5)
+- mf1: GaussMembFunc(mu=0.1666666716337204, sigma=0.5)
+- mf2: GaussMembFunc(mu=0.3333333432674408, sigma=0.5)
+- mf3: GaussMembFunc(mu=0.5, sigma=0.5)
+- mf4: GaussMembFunc(mu=0.6666666865348816, sigma=0.5)
+- mf5: GaussMembFunc(mu=0.8333333134651184, sigma=0.5)
+- mf6: GaussMembFunc(mu=1.0, sigma=0.5)

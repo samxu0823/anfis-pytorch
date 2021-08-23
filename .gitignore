@@ -106,5 +106,3 @@ venv.bak/
 # xml & iml
 *.xml
 *.iml
-my_data_set/
-my_plot

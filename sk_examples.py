@@ -162,7 +162,7 @@ def test_vignette(show_plots=True):
         model,
         max_epochs=50,
         # train_split=None,
-        # batch_size=1024,
+        # window_size=1024,
         criterion=torch.nn.MSELoss,
         # criterion__reduction='sum',
         optimizer=torch.optim.SGD,

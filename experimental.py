@@ -92,14 +92,17 @@ def plot_errors_class(err):
     plt.show()
 
 
-def plot_results(y_actual, y_predicted):
+def plot_results(y_actual, y_predicted, title="Validation", channel="m1"):
     '''
         Plot the actual and predicted y values (in different colours).
     '''
     plt.plot(range(len(y_predicted)), y_predicted.detach().numpy(),
-             'r', label='trained')
-    plt.plot(range(len(y_actual)), y_actual.numpy(), 'b', label='original')
+             'r', label='Prediction', linewidth=0.8, linestyle='-.')
+    plt.plot(range(len(y_actual)), y_actual.numpy(), 'b', label='Target', linewidth=0.5)
     plt.legend(loc='upper left')
+    plt.title(title)
+    plt.ylabel(channel)
+    plt.xlabel("Index")
     plt.show()
 
 
@@ -125,16 +128,24 @@ def _plot_mfs(var_name, fv, x):
     max = 2
     num = 500
     x_in = torch.arange(min, max, (max - min) / num)
+    fig = plt.figure()
+    i = 1
     for mfname, yvals in fv.fuzzify(x_in):
-        plt.plot(x_in.tolist(), yvals.tolist(), label=mfname)
-    plt.xlabel('Values for variable {} ({} MFs)'.format(var_name, fv.num_mfs))
-    plt.ylabel('Membership')
+        a = "Low" if i == 1 else "High"
+        plt.plot(x_in.tolist(), yvals.tolist(), label=a, linewidth=3)
+        i = i+1
+        # plt.plot(x_in.tolist(), yvals.tolist(), label=["Low", "High"], linewidth=3)
+    plt.xlabel('Values for variable {} ({} MFs)'.format(var_name, fv.num_mfs), fontsize=30)
+    plt.ylabel('Membership', fontsize=30)
+    plt.tick_params(labelsize=23)
     # plt.legend(bbox_to_anchor=(1., 0.95))
-    plt.legend()
+    plt.legend(fontsize=30)
+    plt.grid()
     plt.show()
+    return fig
 
 
-def plot_all_mfs(model, x):
+def plot_all_mfs(model, x, save=False, path="before"):
     """
     Plot membership function. Detail see _plot_mfs.
     Customize the x interval: tensor([[min, min], [max, max]]) for 2 input features.
@@ -143,7 +154,9 @@ def plot_all_mfs(model, x):
     :return:
     """
     for i, (var_name, fv) in enumerate(model.layer.fuzzify.varmfs.items()):
-        _plot_mfs(var_name, fv, x[:, i])
+        fig = _plot_mfs(var_name, fv, x[:, i])
+        if save:
+            fig.savefig(f"my_model/membership/{path}/MF_{i}")
 
 
 def save_model(model, classifier, name="my_model", detail=False, ** other_dict):
@@ -158,7 +171,7 @@ def save_model(model, classifier, name="my_model", detail=False, ** other_dict):
     void
     """
     # Defined path and create folder
-    model_type="Classification" if classifier else "Regression"
+    model_type="Classification" if classifier else "regression"
     model_path = f"my_model/{model_type}"
     folder = os.path.exists(model_path)
     if not folder:
@@ -187,8 +200,8 @@ def calc_error_class(y_pred, y_actual):
     with torch.no_grad():
         error = torch.nn.CrossEntropyLoss()
         current = error(y_pred, y_actual.squeeze().long())
-        no_right = torch.sum(torch.argmax(y_pred, dim=1) == y_actual.squeeze().long())
-        accuracy = no_right / y_pred.size()[0]
+        num_right = torch.sum(torch.argmax(y_pred, dim=1) == y_actual.squeeze().long())
+        accuracy = num_right / y_pred.size()[0]
     return current, accuracy
 
 
@@ -206,9 +219,9 @@ def test_anfis(model, data, train=None, show_plots=False, mode="r"):
     if show_plots:
         if train is not None:
             x_train, _ = train.dataset.tensors
-            plot_all_mfs(model, x_train)
+            plot_all_mfs(model, x_train, save=True, path="after")
         else:
-            plot_all_mfs(model, x_test)
+            plot_all_mfs(model, x_test, save=True, path="after")
     print('### Testing for {} cases'.format(x_test.shape[0]))
     y_pred = model(x_test)
     if mode == "r":
@@ -284,7 +297,7 @@ def train_anfis_with(model, data, optimizer, criterion,
     return x, y_pred, y_actual,
 
 
-def train_anfis_with_cv(model, data, optimizer, criterion,
+def train_anfis_with_cv(model, data, optimizer, criterion, scheduler,
                         epochs=500, show_plots=False, metric="mse", save=False, name="my_model", detail=False):
     """
     Train the given model using training data, meanwhile use test data to test the model in every epoch.
@@ -293,6 +306,7 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
     :param data: [DataLoader] or [list], training data or list of training data and test data.
     :param optimizer: [optim], optimizer.
     :param criterion: [Loss], loss function.
+    :param scheduler: [lr_scheduler], adaptive learning rate.
     :param epochs: [int], no. of training epoch.
     :param show_plots: [boolean], show the learning curve.
     :param metric: [str],  error used to plot curve.
@@ -306,9 +320,9 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
     """
     time_start = time.time()
     test = False  # Using test data during training or not
-    classifier = False  # Regression or classification
+    classifier = False  # regression or classification
 
-    if isinstance(criterion, torch.nn.MSELoss):  # Regression
+    if isinstance(criterion, torch.nn.MSELoss):  # regression
         errors = {"mse": [], "rmse": [], "PE": []}  # Keep a dict of these for plotting afterwards
     elif isinstance(criterion, torch.nn.CrossEntropyLoss):  # Classification
         classifier = True
@@ -335,6 +349,7 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+        scheduler.step()
         # Epoch ending, so now fit the coefficients(Consequent parameter) based on all data:
         x_train, y_train_actual = train_data.dataset.tensors  # Training data in sequence
         with torch.no_grad():
@@ -376,9 +391,11 @@ def train_anfis_with_cv(model, data, optimizer, criterion,
                 train_error = errors[metric][-1][0]
                 test_error = errors[metric][-1][1]
                 print(f'epoch {t}: Train {metric}={train_error:.5f}, Test {metric}={test_error:.5f}')
+            print("Current LR:", scheduler.get_last_lr()[0])
+            print("-----------------")
     test_err = [x for _, x in errors[metric]]
     time_end = time.time()
-    print("training time:", time_end - time_start)
+    print("Training time: %.2fs" % (time_end - time_start))
     if metric == "acc":
         m_test_err =max(test_err)
         m_epoch = test_err.index(max(test_err)) + 1
@@ -438,21 +455,8 @@ def train_anfis_cv(model, data, epochs=500, show_plots=False, metric="rmse", mod
     see return of train_anfis_with_cv.
     """
     # optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.99)
-    optimizer = torch.optim.Adam(model.parameters(), lr=5e-4, weight_decay=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
     criterion = torch.nn.MSELoss(reduction='sum') if mode == "r" else torch.nn.CrossEntropyLoss()
-    return train_anfis_with_cv(model, data, optimizer, criterion, epochs, show_plots, metric, save, name, detail)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[4000], gamma=0.6)
+    return train_anfis_with_cv(model, data, optimizer, criterion, scheduler, epochs, show_plots, metric, save, name, detail)
 
-
-if __name__ == '__main__':
-    # x = torch.arange(1, 100, dtype=dtype).unsqueeze(1)
-    # y = torch.pow(x, 3)
-    # model, errors = linear_model(x, y, 100)
-    # plot_errors(errors)
-    # plot_results(y, model(x))
-    # s = {"mse": [1], "rmse": [(2, 3), (5, 6)]}
-    # print(isinstance(s["mse"][0], int))
-    # print(isinstance(s["mse"][0], tuple))
-    # print(isinstance(s["rmse"][0], tuple))
-    # print(isinstance(s["rmse"][0], int))
-    a = np.array([[1, 6, 8, 10], [2, 9, 10, 2], [3, 10, 7, 5]])
-    print(a[-1, [-1]])
